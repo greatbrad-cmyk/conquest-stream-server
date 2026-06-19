@@ -5,24 +5,37 @@ const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
+
+// =============================================
+// ✅ FULL CORS SUPPORT
+// =============================================
+app.use((req, res, next) => {
+    // Allow all origins
+    res.header('Access-Control-Allow-Origin', '*');
+    // Allow all methods
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    // Allow all headers
+    res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+    // Handle preflight requests
+    if (req.method === 'OPTIONS') {
+        return res.status(200).send();
     }
+    next();
 });
 
-// Middleware
 app.use(express.json());
 app.use(express.static('public'));
+
+// =============================================
+// 🔐 PASSWORD
+// =============================================
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "conquest2025";
 
 // =============================================
 // 📁 CODE STORAGE
 // =============================================
 const CODES_FILE = path.join(__dirname, 'codes.json');
 
-// Initialize codes file if it doesn't exist
 if (!fs.existsSync(CODES_FILE)) {
     fs.writeFileSync(CODES_FILE, JSON.stringify({}, null, 2));
 }
@@ -51,9 +64,18 @@ function writeCodes(codes) {
 // 📋 API ROUTES
 // =============================================
 
-// Home page
 app.get('/', (req, res) => {
     res.send('✅ Conquest Artz Signaling Server is running!');
+});
+
+// Verify password
+app.post('/verify-password', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASSWORD) {
+        res.json({ success: true });
+    } else {
+        res.json({ success: false });
+    }
 });
 
 // Get all codes
@@ -176,4 +198,5 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`✅ Signaling server running on port ${PORT}`);
     console.log(`📁 Codes saved to: ${CODES_FILE}`);
+    console.log(`🔐 Admin password is set`);
 });

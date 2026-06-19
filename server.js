@@ -7,16 +7,12 @@ const path = require('path');
 const app = express();
 
 // =============================================
-// ✅ FULL CORS SUPPORT
+// ✅ CORS HEADERS
 // =============================================
 app.use((req, res, next) => {
-    // Allow all origins
     res.header('Access-Control-Allow-Origin', '*');
-    // Allow all methods
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    // Allow all headers
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-    // Handle preflight requests
     if (req.method === 'OPTIONS') {
         return res.status(200).send();
     }
@@ -36,6 +32,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "conquest2025";
 // =============================================
 const CODES_FILE = path.join(__dirname, 'codes.json');
 
+// Initialize codes file if it doesn't exist
 if (!fs.existsSync(CODES_FILE)) {
     fs.writeFileSync(CODES_FILE, JSON.stringify({}, null, 2));
 }
@@ -64,11 +61,12 @@ function writeCodes(codes) {
 // 📋 API ROUTES
 // =============================================
 
+// Home route
 app.get('/', (req, res) => {
     res.send('✅ Conquest Artz Signaling Server is running!');
 });
 
-// Verify password
+// Verify admin password
 app.post('/verify-password', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
@@ -84,7 +82,7 @@ app.get('/codes', (req, res) => {
     res.json(codes);
 });
 
-// Save a code
+// Save a new code
 app.post('/save-code', (req, res) => {
     const { code, client, event, active } = req.body;
     const codes = readCodes();
@@ -131,9 +129,21 @@ app.delete('/delete-code/:code', (req, res) => {
 // =============================================
 const rooms = {};
 
+// Create HTTP server
+const server = http.createServer(app);
+
+// Create Socket.IO server with CORS
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
 io.on('connection', (socket) => {
     console.log('🔗 User connected:', socket.id);
 
+    // Join a room
     socket.on('join-room', (roomId) => {
         socket.join(roomId);
         console.log(`📺 ${socket.id} joined room: ${roomId}`);
@@ -144,6 +154,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Broadcaster is ready
     socket.on('broadcaster-ready', (roomId) => {
         if (!rooms[roomId]) rooms[roomId] = {};
         rooms[roomId].broadcaster = socket.id;
@@ -152,12 +163,14 @@ io.on('connection', (socket) => {
         socket.to(roomId).emit('broadcaster-ready');
     });
 
+    // Viewer requests stream
     socket.on('request-stream', (roomId) => {
         if (rooms[roomId] && rooms[roomId].broadcaster) {
             io.to(rooms[roomId].broadcaster).emit('request-stream', socket.id);
         }
     });
 
+    // WebRTC signaling
     socket.on('offer', (data) => {
         socket.to(data.target).emit('offer', {
             sdp: data.sdp,
@@ -179,6 +192,7 @@ io.on('connection', (socket) => {
         });
     });
 
+    // Disconnect
     socket.on('disconnect', () => {
         console.log('🔌 User disconnected:', socket.id);
         for (const [roomId, room] of Object.entries(rooms)) {
